@@ -55,6 +55,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Union
 from transformers import Seq2SeqTrainingArguments
 from transformers import Seq2SeqTrainer
+from optimum.onnxruntime import ORTTrainer, ORTTrainingArguments
 
 
 def load_audio_timestamp_dataset(dataset_path):
@@ -283,7 +284,7 @@ def master_function():
 
         return {"wer": wer}
     
-    training_args = Seq2SeqTrainingArguments(
+    training_args = ORTTrainingArguments(
     "whisper-small-medical-1.0",  # change to a repo name of your choice
     per_device_train_batch_size=8,
     gradient_accumulation_steps=4,  # increase by 2x for every 2x decrease in batch size
@@ -307,7 +308,7 @@ def master_function():
     output_dir = "./model_artifacts/processor/")
 
     
-    trainer = Seq2SeqTrainer(
+    trainer = ORTTrainer(
     args=training_args,
     model=model,
     train_dataset=final_audio_dataset["train"],
