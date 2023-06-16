@@ -1,3 +1,4 @@
+optimum
 transformers 
 accelerate
 librosa

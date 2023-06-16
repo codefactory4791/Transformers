@@ -38,6 +38,7 @@ from os.path import isfile, join
 import torch
 import pandas as pd
 import pydub
+import evaluate
 from pydub import playback
 from datasets import Dataset, Audio,DatasetDict,load_from_disk
 from collections import Counter
@@ -225,23 +226,9 @@ class DataCollatorSpeechSeq2SeqWithPadding:
 
 
 
-import evaluate
 
-metric = evaluate.load("wer")
-def compute_metrics(pred):
-    pred_ids = pred.predictions
-    label_ids = pred.label_ids
 
-    # replace -100 with the pad_token_id
-    label_ids[label_ids == -100] = tokenizer.pad_token_id
 
-    # we do not want to group tokens when computing the metrics
-    pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-    label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
-
-    wer = 100 * metric.compute(predictions=pred_str, references=label_str)
-
-    return {"wer": wer}
 
 
 
@@ -254,8 +241,12 @@ def compute_metrics(pred):
 # os.environ["WORLD_SIZE"] = "1"
 
 def master_function():
-    bucket_name = "./Audio_Segments/"
-    dataset_path = "./audio_start_end.csv" 
+    bucket_name = "./data/Audio_Segments/"
+    dataset_path = "./data/audio_start_end.csv" 
+
+    os.mkdir("./model_artifacts/processor/")
+    os.mkdir("./model_artifacts/model/")
+
     final_dataset = build_audio_dataset(bucket_name, dataset_path)
 
     
@@ -273,6 +264,24 @@ def master_function():
 
     
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(processor=processor)
+
+
+
+    metric = evaluate.load("wer")
+    def compute_metrics(pred):
+        pred_ids = pred.predictions
+        label_ids = pred.label_ids
+
+        # replace -100 with the pad_token_id
+        label_ids[label_ids == -100] = tokenizer.pad_token_id
+
+        # we do not want to group tokens when computing the metrics
+        pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+        label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
+
+        wer = 100 * metric.compute(predictions=pred_str, references=label_str)
+
+        return {"wer": wer}
     
     training_args = Seq2SeqTrainingArguments(
     "whisper-small-medical-1.0",  # change to a repo name of your choice
@@ -294,7 +303,8 @@ def master_function():
     report_to=["tensorboard"],
     load_best_model_at_end=True,
     metric_for_best_model="wer",
-    greater_is_better=False)
+    greater_is_better=False,   
+    output_dir = "./model_artifacts/processor/")
 
     
     trainer = Seq2SeqTrainer(
@@ -305,14 +315,12 @@ def master_function():
     data_collator=data_collator,
     compute_metrics=compute_metrics,
     tokenizer=processor.feature_extractor,)
-
-    
     
     processor.save_pretrained(training_args.output_dir)
     
     trainer.train()
 
-    trainer.save_model("./model_object/")
+    trainer.save_model("./model_artifacts/model/")
     
 
 if __name__ == "__main__":
